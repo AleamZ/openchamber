@@ -1,6 +1,7 @@
 import React from 'react';
 import { UsageCard } from './UsageCard';
 import { QuotaCredentials } from './QuotaCredentials';
+import { NineRouterCredentials } from './NineRouterCredentials';
 import { QUOTA_PROVIDERS } from '@/lib/quota';
 import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { updateDesktopSettings } from '@/lib/persistence';
@@ -85,13 +86,14 @@ export const UsagePage: React.FC = () => {
       ? selectedResult.error
       : null;
   const showInDropdown = selectedProviderId ? dropdownProviderIds.includes(selectedProviderId) : false;
+  const isNineRouter = selectedProviderId === '9router';
   const credentialProviderId = selectedProviderId === 'exe-dev'
     || selectedProviderId === 'ollama-cloud'
     || selectedProviderId === 'cursor'
     || selectedProviderId === 'zenmux'
     ? selectedProviderId
     : null;
-  const hasCredentialsForm = credentialProviderId !== null;
+  const hasCredentialsForm = credentialProviderId !== null || isNineRouter;
   const handleDropdownToggle = React.useCallback((enabled: boolean) => {
     if (!selectedProviderId) {
       return;
@@ -221,6 +223,10 @@ export const UsagePage: React.FC = () => {
 
       {credentialProviderId && (
         <QuotaCredentials providerId={credentialProviderId} providerName={providerName} />
+      )}
+
+      {isNineRouter && (
+        <NineRouterCredentials providerName={providerName} />
       )}
 
       {usage?.windows && Object.keys(usage.windows).length > 0 && (

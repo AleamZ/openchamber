@@ -29,5 +29,6 @@ export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
   { id: 'neuralwatt', name: 'NeuralWatt' },
   { id: 'kilo', name: 'Kilo Code' },
   { id: 'zenmux', name: 'ZenMux' },
+  { id: '9router', name: '9Router' },
   { id: 'xai', name: 'xAI' },
 ];

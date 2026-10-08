@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'Użycie wymaga klucza API platformy z konsoli ZenMux. Klucz, którego OpenCode używa do czatu, jest osobny i nie jest tutaj używany.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'Użycie jest odczytywane z panelu każdego 9Router. Wprowadź adres panelu i hasło logowania; klucz API, którego OpenCode używa do czatu, tam nie działa.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'Zapisanie zastępuje całą listę, dlatego wprowadź ponownie wszystkie hasła.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'Wprowadź nazwę, adres URL i hasło dla serwera {server}.',
   'settings.providers.page.quotaCredentials.serverName': 'Nazwa',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'Adres URL panelu',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Hasło panelu',

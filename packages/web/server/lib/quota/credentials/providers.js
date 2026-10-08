@@ -1,3 +1,4 @@
+import { isRecord } from '../../shared/guards.js';
 import { deleteQuotaCredential, readQuotaCredential, writeQuotaCredential } from './store.js';
 
 const clean = (value) => typeof value === 'string' && !/[\r\n]/.test(value) ? value.trim() : '';
@@ -25,7 +26,7 @@ export const normalizers = {
     const seenNames = new Set();
     const servers = [];
     for (const entry of value.servers) {
-      if (!entry || typeof entry !== 'object') return null;
+      if (!isRecord(entry)) return null;
       const name = clean(entry.name);
       if (!name || name.length > 40) return null;
       const lowerName = name.toLowerCase();

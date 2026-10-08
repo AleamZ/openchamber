@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': '사용량을 보려면 ZenMux 콘솔의 플랫폼 API 키가 필요합니다. OpenCode가 채팅에 쓰는 키는 별도이며 여기서는 사용하지 않습니다.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': '사용량은 각 9Router 대시보드에서 조회됩니다. 대시보드 주소와 로그인 비밀번호를 입력하세요. OpenCode가 채팅에 사용하는 API 키는 작동하지 않습니다.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': '저장하면 전체 목록이 교체되므로 모든 비밀번호를 다시 입력하세요.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': '서버 {server}의 이름, URL, 비밀번호를 입력하세요.',
   'settings.providers.page.quotaCredentials.serverName': '이름',
   'settings.providers.page.quotaCredentials.dashboardUrl': '대시보드 URL',
   'settings.providers.page.quotaCredentials.dashboardPassword': '대시보드 비밀번호',

@@ -1,3 +1,4 @@
+import { isVSCodeRuntime } from '@/lib/desktop';
 import type { QuotaProviderId } from '@/types';
 
 interface QuotaProviderMeta {
@@ -5,7 +6,7 @@ interface QuotaProviderMeta {
   name: string;
 }
 
-export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
+const ALL_QUOTA_PROVIDERS: readonly QuotaProviderMeta[] = [
   { id: 'claude', name: 'Claude' },
   { id: 'cline-pass', name: 'ClinePass' },
   { id: 'codex', name: 'Codex' },
@@ -32,3 +33,8 @@ export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
   { id: '9router', name: '9Router' },
   { id: 'xai', name: 'xAI' },
 ];
+
+// The VS Code runtime cannot save 9router credentials; hide 9Router until parity is supported.
+export const QUOTA_PROVIDERS: QuotaProviderMeta[] = isVSCodeRuntime()
+  ? ALL_QUOTA_PROVIDERS.filter((provider) => provider.id !== '9router')
+  : [...ALL_QUOTA_PROVIDERS];

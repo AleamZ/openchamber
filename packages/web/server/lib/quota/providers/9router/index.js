@@ -5,7 +5,7 @@ import { aggregateServer } from './transforms.js';
 
 export const providerId = '9router';
 export const providerName = '9Router';
-export const aliases = ['9router'];
+const aliases = ['9router'];
 
 const defaultClient = createNineRouterClient();
 
@@ -41,6 +41,11 @@ export const fetchQuota = async ({
       fulfilledCount += 1;
       const serverModels = aggregateServer(server.name, settlement.value?.connections);
       models = { ...models, ...serverModels };
+      const skipped = settlement.value?.skipped ?? 0;
+      if (skipped > 0) {
+        const noun = skipped === 1 ? '1 account skipped' : `${skipped} accounts skipped`;
+        errors.push(`${server.name}: ${noun}`);
+      }
     } else {
       const reason = settlement.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
@@ -63,18 +68,23 @@ export const fetchQuota = async ({
     ok,
     configured: true,
     usage,
-    ...(error ? { error } : {}),
+    error,
   });
 };
 
 export const validateCredential = async (credential, client = defaultClient) => {
   const servers = credential?.servers ?? [];
-  for (const server of servers) {
-    try {
-      await client.checkLogin(server);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`${server.name}: ${message}`);
+  const settlements = await Promise.allSettled(servers.map((s) => client.checkLogin(s)));
+  const failures = [];
+  settlements.forEach((settlement, index) => {
+    if (settlement.status === 'rejected') {
+      const server = servers[index];
+      const reason = settlement.reason;
+      const message = reason instanceof Error ? reason.message : String(reason);
+      failures.push(`${server.name}: ${message}`);
     }
+  });
+  if (failures.length > 0) {
+    throw new Error(failures.join('; '));
   }
 };

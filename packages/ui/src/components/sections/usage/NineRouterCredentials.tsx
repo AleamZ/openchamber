@@ -96,6 +96,15 @@ export const NineRouterCredentials: React.FC<{ providerName: string }> = ({ prov
     );
   };
 
+  const firstIncompleteIndex = rows.findIndex(
+    (row) => !row.name.trim() || !row.url.trim() || !row.password.trim()
+  );
+  const isIncomplete = firstIncompleteIndex !== -1;
+  const firstIncompleteRow = isIncomplete ? rows[firstIncompleteIndex] : null;
+  const incompleteServerLabel = firstIncompleteRow
+    ? firstIncompleteRow.name.trim() || `#${firstIncompleteIndex + 1}`
+    : '';
+
   return (
     <div data-settings-item="usage.9router-credentials" className="mb-8">
       <div className="mb-1 px-1">
@@ -121,61 +130,73 @@ export const NineRouterCredentials: React.FC<{ providerName: string }> = ({ prov
         </div>
 
         <div className="space-y-2">
-          {rows.map((row, index) => (
-            <div
-              key={index}
-              className="grid gap-2 sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)_minmax(0,12rem)_auto] sm:items-center"
-            >
-              <label className="block typography-ui-label text-foreground">
-                <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.serverName')}</span>
-                <Input
-                  type="text"
-                  className="h-7 text-xs sm:mt-0 mt-1"
-                  placeholder={t('settings.providers.page.quotaCredentials.serverName')}
-                  value={row.name}
-                  onChange={(event) => updateRow(index, 'name', event.target.value)}
-                  aria-label={t('settings.providers.page.quotaCredentials.serverName')}
-                />
-              </label>
-              <label className="block typography-ui-label text-foreground">
-                <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.dashboardUrl')}</span>
-                <Input
-                  type="url"
-                  className="h-7 font-mono text-xs sm:mt-0 mt-1"
-                  placeholder="https://router.example.com"
-                  value={row.url}
-                  onChange={(event) => updateRow(index, 'url', event.target.value)}
-                  aria-label={t('settings.providers.page.quotaCredentials.dashboardUrl')}
-                />
-              </label>
-              <label className="block typography-ui-label text-foreground">
-                <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.dashboardPassword')}</span>
-                <Input
-                  type="password"
-                  autoComplete="off"
-                  className="h-7 font-mono text-xs sm:mt-0 mt-1"
-                  placeholder={
-                    status?.configured && status.secretMasked
-                      ? status.secretMasked
-                      : t('settings.providers.page.quotaCredentials.dashboardPassword')
-                  }
-                  value={row.password}
-                  onChange={(event) => updateRow(index, 'password', event.target.value)}
-                  aria-label={t('settings.providers.page.quotaCredentials.dashboardPassword')}
-                />
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                disabled={busy || rows.length <= 1}
-                onClick={() => removeRow(index)}
+          {rows.map((row, index) => {
+            const rowLabel = row.name.trim() || `#${index + 1}`;
+            return (
+              <div
+                key={index}
+                className="grid gap-2 sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)_minmax(0,12rem)_auto] sm:items-center"
               >
-                {t('settings.providers.page.quotaCredentials.removeServer')}
-              </Button>
-            </div>
-          ))}
+                <label className="block typography-ui-label text-foreground">
+                  <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.serverName')}</span>
+                  <Input
+                    type="text"
+                    className="h-7 text-xs sm:mt-0 mt-1"
+                    placeholder={t('settings.providers.page.quotaCredentials.serverName')}
+                    value={row.name}
+                    onChange={(event) => updateRow(index, 'name', event.target.value)}
+                    aria-label={t('settings.providers.page.quotaCredentials.serverName')}
+                  />
+                </label>
+                <label className="block typography-ui-label text-foreground">
+                  <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.dashboardUrl')}</span>
+                  <Input
+                    type="url"
+                    className="h-7 font-mono text-xs sm:mt-0 mt-1"
+                    placeholder="https://router.example.com"
+                    value={row.url}
+                    onChange={(event) => updateRow(index, 'url', event.target.value)}
+                    aria-label={t('settings.providers.page.quotaCredentials.dashboardUrl')}
+                  />
+                </label>
+                <label className="block typography-ui-label text-foreground">
+                  <span className="sm:hidden">{t('settings.providers.page.quotaCredentials.dashboardPassword')}</span>
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    className="h-7 font-mono text-xs sm:mt-0 mt-1"
+                    placeholder={
+                      status?.configured && status.secretMasked
+                        ? status.secretMasked
+                        : t('settings.providers.page.quotaCredentials.dashboardPassword')
+                    }
+                    value={row.password}
+                    onChange={(event) => updateRow(index, 'password', event.target.value)}
+                    aria-label={t('settings.providers.page.quotaCredentials.dashboardPassword')}
+                  />
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={busy || rows.length <= 1}
+                  onClick={() => removeRow(index)}
+                  aria-label={`${t('settings.providers.page.quotaCredentials.removeServer')} ${rowLabel}`}
+                >
+                  {t('settings.providers.page.quotaCredentials.removeServer')}
+                </Button>
+              </div>
+            );
+          })}
         </div>
+
+        {isIncomplete && (
+          <p className="typography-meta text-muted-foreground">
+            {t('settings.providers.page.quotaCredentials.nineRouterIncompleteRow', {
+              server: incompleteServerLabel,
+            })}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <Button
@@ -190,7 +211,7 @@ export const NineRouterCredentials: React.FC<{ providerName: string }> = ({ prov
           <Button
             type="button"
             size="xs"
-            disabled={busy}
+            disabled={busy || isIncomplete}
             onClick={() => request(route, 'PUT', { servers: rows })}
           >
             {status?.configured

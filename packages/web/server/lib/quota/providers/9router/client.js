@@ -17,13 +17,12 @@ class LoginLocked extends Error {
     this.seconds = seconds;
   }
 }
+class RequestTimeout extends Error {}
 
 const serverKey = (server) => crypto.createHash('sha256').update(`${server.url}\n${server.password}`).digest('hex');
 
 const readAuthCookie = (response) => {
-  const headers = typeof response.headers?.getSetCookie === 'function'
-    ? response.headers.getSetCookie()
-    : [response.headers?.get('set-cookie') ?? ''];
+  const headers = response.headers.getSetCookie();
   for (const header of headers) {
     const match = /(?:^|[,;]\s*)auth_token=([^;,\s]+)/.exec(header);
     if (match) return `auth_token=${match[1]}`;
@@ -33,10 +32,10 @@ const readAuthCookie = (response) => {
 
 const toRequestError = (error) => {
   if (
-    (typeof DOMException !== 'undefined' && error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) ||
-    error?.name === 'TimeoutError'
+    error instanceof DOMException &&
+    (error.name === 'TimeoutError' || error.name === 'AbortError')
   ) {
-    return new Error('request timed out');
+    return new RequestTimeout('request timed out');
   }
   return error instanceof Error ? error : new Error('request failed');
 };
@@ -102,7 +101,8 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
       throw new Error(`dashboard login failed (HTTP ${response.status})`);
     }
 
-    const errorMsg = asNonEmptyString(asObject(payload)?.error);
+    const rawError = asNonEmptyString(asObject(payload)?.error);
+    const errorMsg = rawError && rawError.length > 200 ? `${rawError.slice(0, 200)}…` : rawError;
     const detail = errorMsg || `HTTP ${response.status}`;
     throw new LoginRejected(`dashboard login rejected: ${detail}`);
   };
@@ -160,7 +160,7 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
       payload = await response.json();
     } catch (error) {
       const reqError = toRequestError(error);
-      if (reqError.message === 'request timed out') {
+      if (reqError instanceof RequestTimeout) {
         throw reqError;
       }
       payload = undefined;

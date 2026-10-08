@@ -150,6 +150,14 @@ describe('9Router client', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('caps 9Router login error text at 200 characters with ellipsis', async () => {
+    const longError = 'E'.repeat(250);
+    const expected = `dashboard login rejected: ${'E'.repeat(200)}…`;
+    const { fetchImpl } = makeFetch({ '/api/auth/login': () => Response.json({ error: longError }, { status: 403 }) });
+    const client = createNineRouterClient({ fetchImpl });
+    await expect(client.checkLogin(SERVER)).rejects.toThrow(expected);
+  });
+
   it('login 503 is not remembered and logs in again on next fetchServer', async () => {
     let attempt = 0;
     const { fetchImpl, calls } = makeFetch({

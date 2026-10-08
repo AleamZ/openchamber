@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': '使用量には ZenMux コンソールのプラットフォーム API キーが必要です。OpenCode がチャットに使うキーは別物で、ここでは使いません。',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': '使用量は各 9Router ダッシュボードから読み取られます。ダッシュボードのアドレスとログインパスワードを入力してください。OpenCode がチャットに使用する API キーはここでは使えません。',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': '保存するとリスト全体が置き換えられるため、すべてのパスワードを再入力してください。',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'サーバー {server} の名前、URL、パスワードを入力してください。',
   'settings.providers.page.quotaCredentials.serverName': '名前',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'ダッシュボード URL',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'ダッシュボードのパスワード',

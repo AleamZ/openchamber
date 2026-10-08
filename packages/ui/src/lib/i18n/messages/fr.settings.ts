@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'L’usage nécessite une clé API de plateforme depuis la console ZenMux. La clé qu’OpenCode utilise pour le chat est distincte et n’est pas utilisée ici.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'L’utilisation est lue depuis chaque tableau de bord 9Router. Saisissez l’adresse du tableau de bord et son mot de passe de connexion ; la clé API qu’OpenCode utilise pour le chat ne fonctionne pas ici.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'L’enregistrement remplace toute la liste, veuillez donc saisir à nouveau chaque mot de passe.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'Renseignez le nom, l’URL et le mot de passe pour le serveur {server}.',
   'settings.providers.page.quotaCredentials.serverName': 'Nom',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'URL du tableau de bord',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Mot de passe du tableau de bord',

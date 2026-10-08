@@ -53,6 +53,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'Kullanım için ZenMux konsolundan bir Platform API anahtarı gerekir. OpenCode’un sohbet için kullandığı anahtar ayrıdır ve burada kullanılmaz.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'Kullanım her 9Router kontrol panelinden okunur. Kontrol paneli adresini ve giriş şifresini girin; OpenCode’un sohbet için kullandığı API anahtarı orada çalışmaz.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'Kaydetmek tüm listenin üzerine yazar, bu nedenle her şifreyi tekrar girin.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': '{server} sunucusu için adı, URL\'yi ve şifreyi girin.',
   'settings.providers.page.quotaCredentials.serverName': 'Ad',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'Kontrol paneli URL\'si',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Kontrol paneli şifresi',

@@ -70,6 +70,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'Voor gebruik is een Platform-API-sleutel uit de ZenMux-console nodig. De sleutel die OpenCode voor chat gebruikt, staat daar los van en wordt hier niet gebruikt.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'Het verbruik wordt uit elk 9Router-dashboard gelezen. Voer het dashboardadres en het inlogwachtwoord in; de API-sleutel die OpenCode voor chat gebruikt, werkt daar niet.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'Opslaan vervangt de volledige lijst, dus voer elk wachtwoord opnieuw in.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'Vul de naam, URL en het wachtwoord in voor server {server}.',
   'settings.providers.page.quotaCredentials.serverName': 'Naam',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'Dashboard-URL',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Dashboard-wachtwoord',

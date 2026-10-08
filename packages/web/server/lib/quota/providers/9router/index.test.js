@@ -34,15 +34,35 @@ describe('9Router quota provider', () => {
   });
 
   it('says so when no account reports quota', async () => {
-    const client = { fetchServerCached: async () => ({ connections: [], skipped: 2 }) };
+    const client = { fetchServerCached: async () => ({ connections: [], skipped: 0 }) };
     const result = await fetchQuota({ readCredential: () => credential, client });
     expect(result).toMatchObject({ ok: true, error: 'No 9Router accounts report quota' });
   });
 
-  it('validates every server login and names the failing one', async () => {
+  it('appends skipped accounts to error list without changing ok', async () => {
+    const client = {
+      fetchServerCached: async (server) => {
+        if (server.name === 'tunnel') {
+          return { connections: [{ provider: 'codex', windows: [window(40)] }], skipped: 1 };
+        }
+        return { connections: [{ provider: 'codex', windows: [window(60)] }], skipped: 2 };
+      },
+    };
+    const result = await fetchQuota({ readCredential: () => credential, client });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe('tunnel: 1 account skipped; vps: 2 accounts skipped');
+  });
+
+  it('validates every server login and lists every failure in server order', async () => {
     const checked = [];
-    const client = { checkLogin: async (server) => { checked.push(server.name); if (server.name === 'vps') throw new Error('wrong dashboard password'); } };
-    await expect(validateCredential(credential, client)).rejects.toThrow('vps: wrong dashboard password');
+    const client = {
+      checkLogin: async (server) => {
+        checked.push(server.name);
+        if (server.name === 'tunnel') throw new Error('connection refused');
+        if (server.name === 'vps') throw new Error('wrong dashboard password');
+      },
+    };
+    await expect(validateCredential(credential, client)).rejects.toThrow('tunnel: connection refused; vps: wrong dashboard password');
     expect(checked).toEqual(['tunnel', 'vps']);
   });
 });

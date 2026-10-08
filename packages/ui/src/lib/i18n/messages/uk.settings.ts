@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'Для обліку використання потрібен ключ Platform API з консолі ZenMux. Ключ, який OpenCode використовує для чату, окремий і тут не застосовується.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'Використання зчитується з панелі кожного 9Router. Введіть адресу панелі та пароль для входу; ключ API, який OpenCode використовує для чату, тут не працює.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'Збереження замінює весь список, тому введіть кожен пароль ще раз.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'Вкажіть назву, URL та пароль для сервера {server}.',
   'settings.providers.page.quotaCredentials.serverName': 'Назва',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'URL панелі',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Пароль панелі',

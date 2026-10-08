@@ -62,6 +62,43 @@ describe('9Router quota transforms', () => {
     })).toEqual([{ windowKey: 'session', usedPercent: 100, resetAt: null }]);
   });
 
+  it('parses numeric strings for total, remaining, and used', () => {
+    const windows = connectionWindows('codex', {
+      quotas: {
+        session: { used: '20', total: '100', remaining: '80', resetAt: null },
+      },
+    });
+    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 20, resetAt: null }]);
+  });
+
+  it('treats blank remaining as missing and falls back to used', () => {
+    const windows = connectionWindows('codex', {
+      quotas: {
+        session: { used: 35, total: 100, remaining: '   ', resetAt: null },
+      },
+    });
+    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 35, resetAt: null }]);
+  });
+
+  it('accepts numeric epoch-ms resetAt', () => {
+    const epochMs = 1728400000000;
+    const windows = connectionWindows('codex', {
+      quotas: {
+        session: { used: 10, total: 100, resetAt: epochMs },
+      },
+    });
+    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 10, resetAt: epochMs }]);
+  });
+
+  it('clamps to 0% when remaining exceeds total', () => {
+    const windows = connectionWindows('codex', {
+      quotas: {
+        session: { total: 100, remaining: 125, resetAt: null },
+      },
+    });
+    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 0, resetAt: null }]);
+  });
+
   it('averages accounts of one provider type per window and keeps the earliest reset', () => {
     const models = aggregateServer('9routerVPS', [
       { provider: 'codex', windows: [{ windowKey: 'session', usedPercent: 20, resetAt: Date.parse(RESET_A) }] },

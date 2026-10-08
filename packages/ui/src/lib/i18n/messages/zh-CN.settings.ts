@@ -73,6 +73,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': '查看用量需要 ZenMux 控制台中的平台 API 密钥。OpenCode 用于聊天的密钥是另一把，这里不会使用。',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': '用量从每个 9Router 仪表盘读取。请输入仪表盘地址及其登录密码；OpenCode 用于聊天的 API 密钥在那里不起作用。',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': '保存会替换整个列表，因此请重新输入所有密码。',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': '请填写服务器 {server} 的名称、URL 和密码。',
   'settings.providers.page.quotaCredentials.serverName': '名称',
   'settings.providers.page.quotaCredentials.dashboardUrl': '仪表盘网址',
   'settings.providers.page.quotaCredentials.dashboardPassword': '仪表盘密码',

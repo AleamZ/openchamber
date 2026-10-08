@@ -1,4 +1,4 @@
-import { asObject, toNumber, toUsageWindow } from '../../utils/index.js';
+import { asNonEmptyString, asObject, toNumber, toUsageWindow } from '../../utils/index.js';
 
 const PROVIDER_LABELS = {
   codex: 'Codex',
@@ -23,9 +23,20 @@ const asRecord = (value) => {
 };
 
 const toResetTimestamp = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const timestamp = Number.isFinite(value) ? value : Date.parse(String(value));
-  return Number.isFinite(timestamp) ? timestamp : null;
+  const str = asNonEmptyString(value);
+  if (str === null) {
+    return Number.isFinite(value) ? value : null;
+  }
+  const numeric = toNumber(str);
+  if (numeric !== null && numeric > 0) return numeric;
+  const parsed = Date.parse(str);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseNumber = (value) => {
+  const str = asNonEmptyString(value);
+  if (str !== null) return toNumber(str);
+  return Number.isFinite(value) ? value : null;
 };
 
 // 9Router reports `remaining` in the same unit as `total` for every provider:
@@ -33,11 +44,11 @@ const toResetTimestamp = (value) => {
 // it when present; fall back to `used`.
 const quotaUsedPercent = (quota) => {
   if (!quota || quota.unlimited === true) return null;
-  const total = toNumber(quota.total);
+  const total = parseNumber(quota.total);
   if (total === null || total <= 0) return null;
-  const remaining = toNumber(quota.remaining);
+  const remaining = parseNumber(quota.remaining);
   if (remaining !== null) return clampPercent(((total - remaining) * 100) / total);
-  const used = toNumber(quota.used);
+  const used = parseNumber(quota.used);
   return used === null ? null : clampPercent((used * 100) / total);
 };
 

@@ -2355,6 +2355,7 @@ export const settingsDict = {
   'settings.providers.page.quotaCredentials.zenmuxInstructions': 'Für die Nutzung brauchen Sie einen Plattform-API-Schlüssel aus der ZenMux-Konsole. Der Schlüssel, den OpenCode für den Chat verwendet, ist ein anderer und wird hier nicht benutzt.',
   'settings.providers.page.quotaCredentials.nineRouterInstructions': 'Die Nutzung wird von jedem 9Router-Dashboard gelesen. Geben Sie die Dashboard-Adresse und das zugehörige Anmeldekennwort ein; der API-Schlüssel, den OpenCode für den Chat verwendet, funktioniert dort nicht.',
   'settings.providers.page.quotaCredentials.nineRouterReenterPasswords': 'Beim Speichern wird die gesamte Liste ersetzt, geben Sie daher alle Passwörter erneut ein.',
+  'settings.providers.page.quotaCredentials.nineRouterIncompleteRow': 'Geben Sie Name, URL und Passwort für Server {server} ein.',
   'settings.providers.page.quotaCredentials.serverName': 'Name',
   'settings.providers.page.quotaCredentials.dashboardUrl': 'Dashboard-URL',
   'settings.providers.page.quotaCredentials.dashboardPassword': 'Dashboard-Passwort',

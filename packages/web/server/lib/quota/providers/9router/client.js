@@ -57,6 +57,7 @@ const mapWithLimit = async (items, limit, worker) => {
 export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {}) => {
   const sessions = new Map();
   const results = new Map();
+  const logins = new Map();
 
   const send = async (url, init) => {
     try {
@@ -78,6 +79,9 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
       if (!cookie) {
         throw new LoginRejected('dashboard login returned no session');
       }
+      try {
+        await response.body?.cancel();
+      } catch {}
       return cookie;
     }
 
@@ -88,15 +92,46 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
     }
 
     if (response.status === 429) {
-      const retryHeader = response.headers?.get('Retry-After');
+      const retryHeader = asNonEmptyString(response.headers?.get('Retry-After'));
       const retrySeconds = toNumber(retryHeader) ?? toNumber(asObject(payload)?.retryAfter) ?? DEFAULT_LOCKOUT_SECONDS;
-      const seconds = Math.max(1, Math.ceil(retrySeconds));
+      const seconds = retrySeconds > 0 ? Math.ceil(retrySeconds) : DEFAULT_LOCKOUT_SECONDS;
       throw new LoginLocked(seconds);
+    }
+
+    if (response.status >= 500) {
+      throw new Error(`dashboard login failed (HTTP ${response.status})`);
     }
 
     const errorMsg = asNonEmptyString(asObject(payload)?.error);
     const detail = errorMsg || `HTTP ${response.status}`;
     throw new LoginRejected(`dashboard login rejected: ${detail}`);
+  };
+
+  const performLogin = (server, key) => {
+    const existing = logins.get(key);
+    if (existing) {
+      return existing;
+    }
+
+    const promise = (async () => {
+      try {
+        const cookie = await login(server);
+        sessions.set(key, { cookie, issuedAt: now() });
+        return cookie;
+      } catch (error) {
+        if (error instanceof LoginRejected) {
+          sessions.set(key, { rejected: error.message });
+        } else if (error instanceof LoginLocked) {
+          sessions.set(key, { lockedUntil: now() + error.seconds * 1000 });
+        }
+        throw error;
+      } finally {
+        logins.delete(key);
+      }
+    })();
+
+    logins.set(key, promise);
+    return promise;
   };
 
   const sessionCookie = async (server, key) => {
@@ -114,18 +149,7 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
     if (state?.cookie && (now() - state.issuedAt < SESSION_TTL_MS)) {
       return state.cookie;
     }
-    try {
-      const cookie = await login(server);
-      sessions.set(key, { cookie, issuedAt: now() });
-      return cookie;
-    } catch (error) {
-      if (error instanceof LoginRejected) {
-        sessions.set(key, { rejected: error.message });
-      } else if (error instanceof LoginLocked) {
-        sessions.set(key, { lockedUntil: now() + error.seconds * 1000 });
-      }
-      throw error;
-    }
+    return performLogin(server, key);
   };
 
   const getJson = async (server, path, cookie) => {
@@ -134,7 +158,11 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
     let payload;
     try {
       payload = await response.json();
-    } catch {
+    } catch (error) {
+      const reqError = toRequestError(error);
+      if (reqError.message === 'request timed out') {
+        throw reqError;
+      }
       payload = undefined;
     }
     return { response, payload };
@@ -226,7 +254,17 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
   };
 
   const checkLogin = async (server) => {
-    await login(server);
+    const key = serverKey(server);
+    const state = sessions.get(key);
+    if (state?.lockedUntil) {
+      if (now() < state.lockedUntil) {
+        const remaining = Math.max(1, Math.ceil((state.lockedUntil - now()) / 1000));
+        throw new LoginLocked(remaining);
+      }
+      sessions.delete(key);
+    }
+    await performLogin(server, key);
+    results.delete(key);
   };
 
   return { fetchServer, fetchServerCached, checkLogin };

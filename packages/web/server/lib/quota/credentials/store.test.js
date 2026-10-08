@@ -12,14 +12,18 @@ describe('quota credential store', () => {
   it('uses owner-only permissions and rejects arbitrary provider paths', () => {
     writeQuotaCredential('exe-dev', { usageToken: 'secret' });
     writeQuotaCredential('zenmux', { platformApiKey: 'secret' });
+    writeQuotaCredential('9router', { servers: [{ name: 'a', url: 'https://a.test', password: 'secret' }] });
     expect(fs.statSync(path.join(temporaryDirectory, 'quota')).mode & 0o777).toBe(0o700);
     expect(fs.statSync(path.join(temporaryDirectory, 'quota', 'exe-dev.json')).mode & 0o777).toBe(0o600);
     expect(fs.statSync(path.join(temporaryDirectory, 'quota', 'zenmux.json')).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(path.join(temporaryDirectory, 'quota', '9router.json')).mode & 0o777).toBe(0o600);
     expect(readQuotaCredential('exe-dev', (value) => value)).toEqual({ usageToken: 'secret' });
     expect(readQuotaCredential('zenmux', (value) => value)).toEqual({ platformApiKey: 'secret' });
+    expect(readQuotaCredential('9router', (value) => value)).toEqual({ servers: [{ name: 'a', url: 'https://a.test', password: 'secret' }] });
     expect(() => writeQuotaCredential('../escape', {})).toThrow('Unsupported credential provider');
     deleteQuotaCredential('exe-dev');
     deleteQuotaCredential('zenmux');
+    deleteQuotaCredential('9router');
   });
 
   it.runIf(process.platform !== 'win32')('leaves an existing directory with the permissions it already has', () => {

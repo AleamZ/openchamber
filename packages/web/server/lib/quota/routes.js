@@ -5,6 +5,7 @@ import { importCursorCredential, validateCursorCredential } from './providers/cu
 import { fetchExeDevUsage } from './providers/exe-dev.js';
 import { aliases as zaiAliases, giftResetTypes as zaiGiftResetTypes, useZaiGiftReset } from './providers/zai.js';
 import { fetchQuota as fetchZenmuxQuota } from './providers/zenmux.js';
+import { validateCredential as validateNineRouterCredential } from './providers/9router/index.js';
 
 const validators = {
   'exe-dev': fetchExeDevUsage,
@@ -14,6 +15,7 @@ const validators = {
     const result = await fetchZenmuxQuota({ readCredential: () => credential });
     if (!result.ok) throw new Error(result.error ?? 'Credential validation failed');
   },
+  '9router': validateNineRouterCredential,
 };
 
 const getProvider = (req, res) => {

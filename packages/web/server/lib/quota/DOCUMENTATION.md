@@ -30,6 +30,7 @@ asked, `/api/quota/providers` answers 500 instead of an empty list.
 
 | Provider ID | Display name | Module | Auth aliases/keys |
 | --- | --- | --- | --- |
+| `9router` | 9Router | `providers/9router/` | Managed list of 9Router dashboards (name, URL, dashboard password) stored under `~/.config/openchamber/quota/` |
 | `claude` | Claude | `providers/claude/` | Claude Code Keychain entry, Claude Code credentials file, OpenCode `auth.json` (`anthropic`, `claude`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | `cline-pass` | ClinePass | `providers/cline-pass.js` | `cline-pass` (API key under `key` or `token`) |
 | `codex` | Codex | `providers/codex.js` | `openai`, `codex`, `chatgpt` |
@@ -69,7 +70,7 @@ All providers should return results via shared helpers to preserve API shape:
 Provider modules must export `providerId`, `providerName`, `aliases`, `isConfigured(auth?)`, and `fetchQuota()`.
 `fetchQuota()` should return a quota result with `usage.windows` keyed by window name (for example `5h`, `7d`, `daily`) and optional provider-specific `usage.models` data.
 
-exe.dev, Ollama Cloud, Cursor, and ZenMux credentials are explicitly managed through Settings. exe.dev usage uses a separately generated HTTPS API token restricted to `billing credits usage` and aggregates every `exe-*` model provider into one monthly credit window. Generate the token with `ssh exe.dev "ssh-key generate-api-key --label=openchamber --exp=30d --cmds='billing credits usage'"`. ZenMux usage uses an optional Platform API key pasted on the Usage page; the OpenCode chat key is never used, and a missing Platform API key means ZenMux quota is not fetched. OpenCode Go usage uses `GET https://opencode.ai/zen/go/v1/usage` with the `opencode-go` API key from OpenCode `auth.json` as a bearer token and the stable `x-opencode-session: openchamber-usage` workload id. The server validates managed credentials before atomic `0600` writes and never returns secrets through its API. OpenChamber never scans browser cookie stores or automatically reads Cursor storage; Cursor import is an explicit one-time user action and never modifies Cursor's database.
+exe.dev, Ollama Cloud, Cursor, ZenMux, and 9Router credentials are explicitly managed through Settings. exe.dev usage uses a separately generated HTTPS API token restricted to `billing credits usage` and aggregates every `exe-*` model provider into one monthly credit window. Generate the token with `ssh exe.dev "ssh-key generate-api-key --label=openchamber --exp=30d --cmds='billing credits usage'"`. ZenMux usage uses an optional Platform API key pasted on the Usage page; the OpenCode chat key is never used, and a missing Platform API key means ZenMux quota is not fetched. OpenCode Go usage uses `GET https://opencode.ai/zen/go/v1/usage` with the `opencode-go` API key from OpenCode `auth.json` as a bearer token and the stable `x-opencode-session: openchamber-usage` workload id. The server validates managed credentials before atomic `0600` writes and never returns secrets through its API. OpenChamber never scans browser cookie stores or automatically reads Cursor storage; Cursor import is an explicit one-time user action and never modifies Cursor's database.
 
 Command Code usage resolves account scope through `GET /alpha/whoami`, then reads server-backed credit balances and five-hour/weekly limits from `GET /alpha/billing/credits?orgId=...`. Personal accounts return `org: null` and use `/alpha/billing/credits` without an `orgId`; organization accounts include their organization id. Web/Electron and VS Code read the standard `command-code` OpenCode auth entry (including OAuth `access`) or `COMMAND_CODE_API_KEY`; credentials remain in the owning runtime and are never returned to shared UI.
 
@@ -223,3 +224,16 @@ The daily cap is optional. A null quota is omitted; a degraded quota remains
 visible with unknown percentages. Legacy `daily` / `monthly` request windows
 remain supported when current fields are absent. Keep the web provider and
 `fetchNanoGptQuota` in `packages/vscode/src/quotaProviders.ts` in sync.
+
+## 9Router quota semantics
+
+9Router quota aggregates usage across one or more 9Router server instances configured via Settings (name, origin URL, dashboard password) and stored under `~/.config/openchamber/quota/9router.json`.
+
+- **Dashboard login**: 9Router uses cookie session authentication (`POST /api/auth/login`, session cookie `auth_token`), valid for 24 hours. There is no API-key access to the dashboard.
+- **Lockout handling**: 9Router returns HTTP 429 when login attempts are throttled. The client respects `Retry-After` (defaulting to 60 seconds) and locks out login attempts until the cooldown expires to avoid triggering further rate-limits.
+- **Endpoints**: Active connections are discovered via `GET /api/providers/client?provider=all&accountStatus=active&page=1&pageSize=500`, and per-connection quota is read concurrently (concurrency limit 4) via `GET /api/usage/:id`.
+- **60 s cache**: Usage results are cached in-memory for 60 seconds because usage calls can trigger upstream OAuth token refreshes (e.g. for Codex or Claude), and frequent polling could exhaust upstream quotas or rate limits.
+- **Aggregation**: Connection quotas are aggregated by server name, provider label, and window key (`<server> · <provider> · <window>`). Used percentage is calculated as the average across connections, `resetAt` is the earliest upcoming reset timestamp, and the value label reflects total and exhausted account counts (`<count> acc` or `<count> acc · <exhausted> exhausted`).
+- **Antigravity group keys**: For Antigravity connections, individual per-model quotas are omitted to keep the list readable; only the group windows (`gemini_session`, `gemini_weekly`, `claude_gpt_session`, `claude_gpt_weekly`) that enforce actual limits are aggregated.
+- **Per-server failure isolation**: Servers are queried concurrently with `Promise.allSettled`. If one server fails (for example, wrong dashboard password or network timeout), successful servers still report usage, and errors from failed servers are surfaced alongside in the error message.
+- **VS Code extension**: The VS Code extension does not implement 9Router quota tracking yet.

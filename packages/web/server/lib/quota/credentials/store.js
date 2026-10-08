@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const MANAGED_QUOTA_PROVIDERS = new Set(['exe-dev', 'ollama-cloud', 'cursor', 'zenmux']);
+const MANAGED_QUOTA_PROVIDERS = new Set(['exe-dev', 'ollama-cloud', 'cursor', 'zenmux', '9router']);
 
 const credentialsDirectory = () => path.join(
   process.env.OPENCHAMBER_DATA_DIR

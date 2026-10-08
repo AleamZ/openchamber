@@ -29,6 +29,7 @@ import * as minimaxCnCodingPlan from './minimax-cn-coding-plan.js';
 import * as neuralwatt from './neuralwatt.js';
 import * as kilo from './kilo.js';
 import * as zenmux from './zenmux.js';
+import * as nineRouter from './9router/index.js';
 import * as ollamaCloud from './ollama-cloud.js';
 import * as wafer from './wafer.js';
 import * as opencodeGo from './opencode-go.js';
@@ -178,6 +179,12 @@ const registry = {
     providerName: zenmux.providerName,
     isConfigured: zenmux.isConfigured,
     fetchQuota: zenmux.fetchQuota
+  },
+  '9router': {
+    providerId: nineRouter.providerId,
+    providerName: nineRouter.providerName,
+    isConfigured: nineRouter.isConfigured,
+    fetchQuota: nineRouter.fetchQuota
   },
   xai: {
     providerId: xai.providerId,

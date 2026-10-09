@@ -217,9 +217,8 @@ export const createNineRouterClient = ({
       try {
         const id = encodeURIComponent(connection.id);
         const { response: usageRes, payload: usagePayload } = await getJson(server, `/api/usage/${id}`, cookie);
-        if (!usageRes || usageRes.status < 200 || usageRes.status >= 300) {
-          const status = usageRes ? usageRes.status : 0;
-          const reason = status > 0 ? `HTTP ${status}` : 'error';
+        if (usageRes.status < 200 || usageRes.status >= 300) {
+          const reason = `HTTP ${usageRes.status}`;
           prog.skipped += 1;
           prog.skippedReasons[reason] = (prog.skippedReasons[reason] ?? 0) + 1;
           return;
@@ -252,6 +251,36 @@ export const createNineRouterClient = ({
     };
   };
 
+  const startFlight = (server, key, entry) => {
+    const progress = { listed: false, total: 0, connections: [], skipped: 0, skippedReasons: {} };
+    const flight = { promise: null, progress };
+    flight.promise = (async () => {
+      try {
+        const result = await fetchServer(server, { progress });
+        if (results.get(key) === entry && entry.inFlight === flight) {
+          entry.status = 'resolved';
+          entry.value = result;
+          entry.error = undefined;
+          entry.settledAt = now();
+          entry.inFlight = null;
+        }
+        return result;
+      } catch (err) {
+        if (results.get(key) === entry && entry.inFlight === flight) {
+          entry.status = 'rejected';
+          entry.value = undefined;
+          entry.error = err;
+          entry.settledAt = now();
+          entry.inFlight = null;
+        }
+        throw err;
+      }
+    })();
+    flight.promise.catch(() => {});
+    entry.inFlight = flight;
+    return flight;
+  };
+
   const fetchServerCached = (server) => {
     const key = serverKey(server);
     let entry = results.get(key);
@@ -267,32 +296,7 @@ export const createNineRouterClient = ({
 
       if (entry.status === 'resolved') {
         if (!entry.inFlight) {
-          const progress = { listed: false, total: 0, connections: [], skipped: 0, skippedReasons: {} };
-          const refreshPromise = (async () => {
-            try {
-              const result = await fetchServer(server, { progress });
-              const current = results.get(key);
-              if (current) {
-                current.status = 'resolved';
-                current.value = result;
-                current.error = undefined;
-                current.settledAt = now();
-                current.inFlight = null;
-              }
-              return result;
-            } catch (err) {
-              const current = results.get(key);
-              if (current) {
-                current.status = 'rejected';
-                current.value = undefined;
-                current.error = err;
-                current.settledAt = now();
-                current.inFlight = null;
-              }
-            }
-          })();
-          refreshPromise.catch(() => {});
-          entry.inFlight = { promise: refreshPromise, progress };
+          startFlight(server, key, entry);
         }
         return Promise.resolve(entry.value);
       }
@@ -309,33 +313,7 @@ export const createNineRouterClient = ({
     }
 
     if (!entry.inFlight) {
-      const progress = { listed: false, total: 0, connections: [], skipped: 0, skippedReasons: {} };
-      const inFlightPromise = (async () => {
-        try {
-          const result = await fetchServer(server, { progress });
-          const current = results.get(key);
-          if (current) {
-            current.status = 'resolved';
-            current.value = result;
-            current.error = undefined;
-            current.settledAt = now();
-            current.inFlight = null;
-          }
-          return result;
-        } catch (err) {
-          const current = results.get(key);
-          if (current) {
-            current.status = 'rejected';
-            current.value = undefined;
-            current.error = err;
-            current.settledAt = now();
-            current.inFlight = null;
-          }
-          throw err;
-        }
-      })();
-      inFlightPromise.catch(() => {});
-      entry.inFlight = { promise: inFlightPromise, progress };
+      startFlight(server, key, entry);
     }
 
     const inFlight = entry.inFlight;

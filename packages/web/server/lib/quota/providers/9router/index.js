@@ -39,12 +39,12 @@ export const fetchQuota = async ({
     const server = servers[index];
     if (settlement.status === 'fulfilled') {
       fulfilledCount += 1;
-      const serverModels = aggregateServer(server.name, settlement.value?.connections);
+      const serverModels = aggregateServer(server.name, settlement.value.connections);
       models = { ...models, ...serverModels };
-      const skipped = settlement.value?.skipped ?? 0;
+      const skipped = settlement.value.skipped ?? 0;
       if (skipped > 0) {
         const noun = skipped === 1 ? '1 account skipped' : `${skipped} accounts skipped`;
-        const reasonsObj = settlement.value?.skippedReasons;
+        const reasonsObj = settlement.value.skippedReasons;
         const reasonEntries = reasonsObj
           ? Object.entries(reasonsObj).filter(([, count]) => count > 0)
           : [];
@@ -59,7 +59,7 @@ export const fetchQuota = async ({
           errors.push(`${server.name}: ${noun}`);
         }
       }
-      const pending = settlement.value?.pending;
+      const pending = settlement.value.pending;
       if (pending === null) {
         errors.push(`${server.name}: still loading`);
       } else if (Number.isFinite(pending) && pending > 0) {

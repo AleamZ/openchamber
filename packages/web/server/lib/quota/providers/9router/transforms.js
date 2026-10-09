@@ -61,7 +61,7 @@ export const connectionWindows = (provider, usage) => {
     if (!quota) continue;
     if (quota.isCreditBalance === true) {
       const amount = parseNumber(quota.total);
-      if (amount === null || !Number.isFinite(amount)) continue;
+      if (amount === null) continue;
       const rawCurrency = asNonEmptyString(quota.currency);
       const currency = rawCurrency !== null ? rawCurrency.toUpperCase() : 'USD';
       windows.push({ windowKey, kind: 'balance', amount, currency });

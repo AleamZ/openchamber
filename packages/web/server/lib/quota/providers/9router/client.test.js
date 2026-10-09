@@ -490,4 +490,115 @@ describe('9Router client', () => {
       process.removeListener('unhandledRejection', onUnhandled);
     }
   });
+
+  it('stale entry -> checkLogin -> fetchServerCached (new flight) -> old flight settles later -> cache holds the new flight result and exactly one new flight was started', async () => {
+    let time = 0;
+    let listCallCount = 0;
+    let unblockFlight1;
+    const flight1Gate = new Promise((resolve) => {
+      unblockFlight1 = resolve;
+    });
+
+    const { fetchImpl, calls } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': async () => {
+        listCallCount++;
+        if (listCallCount === 1) {
+          return listResponse([{ id: 'init', provider: 'codex' }]);
+        }
+        if (listCallCount === 2) {
+          await flight1Gate;
+          return listResponse([{ id: 'flight1', provider: 'codex' }]);
+        }
+        return listResponse([{ id: 'flight2', provider: 'codex' }]);
+      },
+      '/api/usage/:id': ({ pathname }) => {
+        if (pathname.endsWith('/flight2')) return codexUsage(80);
+        if (pathname.endsWith('/flight1')) return codexUsage(10);
+        return codexUsage(50);
+      },
+    });
+
+    const client = createNineRouterClient({ fetchImpl, now: () => time });
+
+    const initial = await client.fetchServerCached(SERVER);
+    expect(initial.connections).toHaveLength(1);
+    expect(initial.connections[0].windows[0].usedPercent).toBe(50);
+
+    time += 65_000;
+
+    const stale = await client.fetchServerCached(SERVER);
+    expect(stale).toBe(initial);
+    expect(listCallCount).toBe(2);
+
+    await client.checkLogin(SERVER);
+
+    const flight2Promise = client.fetchServerCached(SERVER);
+    const res2 = await flight2Promise;
+    expect(res2.connections).toHaveLength(1);
+    expect(res2.connections[0].windows[0].usedPercent).toBe(80);
+    expect(listCallCount).toBe(3);
+
+    unblockFlight1();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const finalCached = await client.fetchServerCached(SERVER);
+    expect(finalCached.connections[0].windows[0].usedPercent).toBe(80);
+    expect(calls.filter((c) => c.path.startsWith('/api/providers/client'))).toHaveLength(3);
+  });
+
+  it('fetch rejects before the deadline with no cache -> rejection', async () => {
+    const { fetchImpl } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => new Response('Bad Gateway', { status: 502 }),
+    });
+    const client = createNineRouterClient({ fetchImpl, partialAfterMs: 20_000 });
+    await expect(client.fetchServerCached(SERVER)).rejects.toThrow('connection list failed (HTTP 502)');
+  });
+
+  it('cached rejection within 60 s makes no network call', async () => {
+    let time = 0;
+    const { fetchImpl, calls } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => new Response('Bad Gateway', { status: 502 }),
+    });
+    const client = createNineRouterClient({ fetchImpl, now: () => time });
+    await expect(client.fetchServerCached(SERVER)).rejects.toThrow('connection list failed (HTTP 502)');
+    expect(calls).toHaveLength(2);
+
+    time += 30_000;
+    await expect(client.fetchServerCached(SERVER)).rejects.toThrow('connection list failed (HTTP 502)');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('returns snapshot with pending: null when the connection list has not loaded by the deadline', async () => {
+    let unblockClientList;
+    const listGate = new Promise((resolve) => {
+      unblockClientList = resolve;
+    });
+
+    const { fetchImpl } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': async () => {
+        await listGate;
+        return listResponse([{ id: 'a', provider: 'codex' }]);
+      },
+      '/api/usage/:id': () => codexUsage(20),
+    });
+
+    const client = createNineRouterClient({ fetchImpl, partialAfterMs: 30 });
+    const snapshot = await client.fetchServerCached(SERVER);
+
+    expect(snapshot.pending).toBeNull();
+    expect(snapshot.connections).toEqual([]);
+    expect(snapshot.skipped).toBe(0);
+    expect(snapshot.skippedReasons).toEqual({});
+
+    unblockClientList();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const complete = await client.fetchServerCached(SERVER);
+    expect(complete.pending).toBe(0);
+    expect(complete.connections).toHaveLength(1);
+  });
 });

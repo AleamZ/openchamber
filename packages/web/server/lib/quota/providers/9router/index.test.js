@@ -53,6 +53,69 @@ describe('9Router quota provider', () => {
     expect(result.error).toBe('tunnel: 1 account skipped; vps: 2 accounts skipped');
   });
 
+  it('formats skipped reasons sorted by count descending then name ascending', async () => {
+    const client = {
+      fetchServerCached: async (server) => {
+        if (server.name === 'tunnel') {
+          return {
+            connections: [{ provider: 'codex', windows: [window(40)] }],
+            skipped: 1,
+            skippedReasons: { 'no usage data': 1 },
+          };
+        }
+        return {
+          connections: [{ provider: 'codex', windows: [window(60)] }],
+          skipped: 7,
+          skippedReasons: {
+            'timeout': 2,
+            'HTTP 401': 2,
+            'no usage data': 3,
+          },
+        };
+      },
+    };
+    const result = await fetchQuota({ readCredential: () => credential, client });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe('tunnel: 1 account skipped (no usage data 1); vps: 7 accounts skipped (no usage data 3, HTTP 401 2, timeout 2)');
+  });
+
+  it('reports pending accounts when still loading', async () => {
+    const client = {
+      fetchServerCached: async (server) => {
+        if (server.name === 'tunnel') {
+          return {
+            connections: [{ provider: 'codex', windows: [window(40)] }],
+            skipped: 1,
+            skippedReasons: { 'no usage data': 1 },
+            pending: 3,
+          };
+        }
+        return {
+          connections: [],
+          skipped: 0,
+          pending: null,
+        };
+      },
+    };
+    const result = await fetchQuota({ readCredential: () => credential, client });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe('tunnel: 1 account skipped (no usage data 1); tunnel: 3 accounts still loading; vps: still loading');
+  });
+
+  it('reports 1 account still loading with singular noun', async () => {
+    const singleCred = { servers: [{ name: 'tunnel', url: 'https://a.test', password: 'pw-a' }] };
+    const client = {
+      fetchServerCached: async () => ({
+        connections: [{ provider: 'codex', windows: [window(40)] }],
+        skipped: 0,
+        pending: 1,
+      }),
+    };
+    const result = await fetchQuota({ readCredential: () => singleCred, client });
+    expect(result.ok).toBe(true);
+    expect(result.error).toBe('tunnel: 1 account still loading');
+  });
+
   it('validates every server login and lists every failure in server order', async () => {
     const checked = [];
     const client = {

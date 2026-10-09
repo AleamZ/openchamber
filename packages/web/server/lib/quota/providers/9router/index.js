@@ -44,6 +44,26 @@ export const fetchQuota = async ({
       const skipped = settlement.value?.skipped ?? 0;
       if (skipped > 0) {
         const noun = skipped === 1 ? '1 account skipped' : `${skipped} accounts skipped`;
+        const reasonsObj = settlement.value?.skippedReasons;
+        const reasonEntries = reasonsObj
+          ? Object.entries(reasonsObj).filter(([, count]) => count > 0)
+          : [];
+        if (reasonEntries.length > 0) {
+          reasonEntries.sort(([nameA, countA], [nameB, countB]) => {
+            if (countB !== countA) return countB - countA;
+            return nameA.localeCompare(nameB);
+          });
+          const detail = reasonEntries.map(([name, count]) => `${name} ${count}`).join(', ');
+          errors.push(`${server.name}: ${noun} (${detail})`);
+        } else {
+          errors.push(`${server.name}: ${noun}`);
+        }
+      }
+      const pending = settlement.value?.pending;
+      if (pending === null) {
+        errors.push(`${server.name}: still loading`);
+      } else if (Number.isFinite(pending) && pending > 0) {
+        const noun = pending === 1 ? '1 account still loading' : `${pending} accounts still loading`;
         errors.push(`${server.name}: ${noun}`);
       }
     } else {

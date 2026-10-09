@@ -13,18 +13,18 @@ describe('9Router quota transforms', () => {
       },
     });
     expect(windows).toEqual([
-      { windowKey: 'session', usedPercent: 20, resetAt: Date.parse(RESET_A) },
-      { windowKey: 'weekly', usedPercent: 55, resetAt: null },
+      { windowKey: 'session', kind: 'percent', usedPercent: 20, resetAt: Date.parse(RESET_A) },
+      { windowKey: 'weekly', kind: 'percent', usedPercent: 55, resetAt: null },
     ]);
   });
 
   it('treats remaining as a count when the provider reports absolute values (kiro, github)', () => {
     expect(connectionWindows('kiro', {
       quotas: { agentic_request: { used: 0, total: 50, remaining: 10, resetAt: null, unlimited: false } },
-    })).toEqual([{ windowKey: 'agentic_request', usedPercent: 80, resetAt: null }]);
+    })).toEqual([{ windowKey: 'agentic_request', kind: 'percent', usedPercent: 80, resetAt: null }]);
     expect(connectionWindows('github', {
       quotas: { premium_interactions: { used: 150, total: 300, remaining: 150, resetAt: null, unlimited: false } },
-    })).toEqual([{ windowKey: 'premium_interactions', usedPercent: 50, resetAt: null }]);
+    })).toEqual([{ windowKey: 'premium_interactions', kind: 'percent', usedPercent: 50, resetAt: null }]);
   });
 
   it('keeps only the four antigravity group quotas', () => {
@@ -59,7 +59,7 @@ describe('9Router quota transforms', () => {
   it('clamps percentages into 0..100 and ignores invalid reset dates', () => {
     expect(connectionWindows('codex', {
       quotas: { session: { used: 130, total: 100, resetAt: 'not a date' } },
-    })).toEqual([{ windowKey: 'session', usedPercent: 100, resetAt: null }]);
+    })).toEqual([{ windowKey: 'session', kind: 'percent', usedPercent: 100, resetAt: null }]);
   });
 
   it('parses numeric strings for total, remaining, and used', () => {
@@ -68,7 +68,7 @@ describe('9Router quota transforms', () => {
         session: { used: '20', total: '100', remaining: '80', resetAt: null },
       },
     });
-    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 20, resetAt: null }]);
+    expect(windows).toEqual([{ windowKey: 'session', kind: 'percent', usedPercent: 20, resetAt: null }]);
   });
 
   it('treats blank remaining as missing and falls back to used', () => {
@@ -77,7 +77,7 @@ describe('9Router quota transforms', () => {
         session: { used: 35, total: 100, remaining: '   ', resetAt: null },
       },
     });
-    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 35, resetAt: null }]);
+    expect(windows).toEqual([{ windowKey: 'session', kind: 'percent', usedPercent: 35, resetAt: null }]);
   });
 
   it('accepts numeric epoch-ms resetAt', () => {
@@ -87,7 +87,7 @@ describe('9Router quota transforms', () => {
         session: { used: 10, total: 100, resetAt: epochMs },
       },
     });
-    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 10, resetAt: epochMs }]);
+    expect(windows).toEqual([{ windowKey: 'session', kind: 'percent', usedPercent: 10, resetAt: epochMs }]);
   });
 
   it('clamps to 0% when remaining exceeds total', () => {
@@ -96,7 +96,7 @@ describe('9Router quota transforms', () => {
         session: { total: 100, remaining: 125, resetAt: null },
       },
     });
-    expect(windows).toEqual([{ windowKey: 'session', usedPercent: 0, resetAt: null }]);
+    expect(windows).toEqual([{ windowKey: 'session', kind: 'percent', usedPercent: 0, resetAt: null }]);
   });
 
   it('averages accounts of one provider type per window and keeps the earliest reset', () => {
@@ -133,5 +133,61 @@ describe('9Router quota transforms', () => {
     expect(providerLabel('github')).toBe('Copilot');
     expect(providerLabel('gemini-cli')).toBe('Gemini CLI');
     expect(providerLabel('qoder')).toBe('qoder');
+  });
+
+  it('reads credit balance quotas with finite total and uppercase currency', () => {
+    const windows = connectionWindows('deepseek', {
+      quotas: {
+        'Balance (USD)': { used: 0, total: 25.5, remainingPercentage: 100, resetAt: null, unlimited: false, isCreditBalance: true, currency: 'usd' },
+        'Balance (EUR)': { used: 0, total: '50.10', resetAt: null, isCreditBalance: true, currency: 'eur' },
+        'Balance (Default)': { total: 10, isCreditBalance: true },
+        'Balance (Bad)': { total: null, isCreditBalance: true },
+      },
+    });
+    expect(windows).toEqual([
+      { windowKey: 'Balance (USD)', kind: 'balance', amount: 25.5, currency: 'USD' },
+      { windowKey: 'Balance (EUR)', kind: 'balance', amount: 50.1, currency: 'EUR' },
+      { windowKey: 'Balance (Default)', kind: 'balance', amount: 10, currency: 'USD' },
+    ]);
+  });
+
+  it('aggregates credit balances by summing amounts with currency and account count', () => {
+    const models = aggregateServer('router1', [
+      {
+        provider: 'deepseek',
+        windows: [{ windowKey: 'Balance (USD)', kind: 'balance', amount: 15.5, currency: 'USD' }],
+      },
+      {
+        provider: 'deepseek',
+        windows: [{ windowKey: 'Balance (USD)', kind: 'balance', amount: 4.5, currency: 'USD' }],
+      },
+      {
+        provider: 'deepseek',
+        windows: [{ windowKey: 'Balance (EUR)', kind: 'balance', amount: 30, currency: 'EUR' }],
+      },
+      {
+        provider: 'deepseek',
+        windows: [{ windowKey: 'Balance (CNY)', kind: 'balance', amount: 50, currency: 'CNY' }],
+      },
+      {
+        provider: 'deepseek',
+        windows: [{ windowKey: 'Balance (CNY)', kind: 'balance', amount: 50, currency: 'CNY' }],
+      },
+    ]);
+
+    const usd = models['router1 · deepseek · Balance (USD)'].windows['Balance (USD)'];
+    expect(usd.usedPercent).toBeNull();
+    expect(usd.remainingPercent).toBeNull();
+    expect(usd.resetAt).toBeNull();
+    expect(usd.windowSeconds).toBeNull();
+    expect(usd.valueLabel).toBe('$20.00 · 2 acc');
+
+    const eur = models['router1 · deepseek · Balance (EUR)'].windows['Balance (EUR)'];
+    expect(eur.usedPercent).toBeNull();
+    expect(eur.valueLabel).toBe('30.00 EUR');
+
+    const cny = models['router1 · deepseek · Balance (CNY)'].windows['Balance (CNY)'];
+    expect(cny.usedPercent).toBeNull();
+    expect(cny.valueLabel).toBe('100.00 CNY · 2 acc');
   });
 });

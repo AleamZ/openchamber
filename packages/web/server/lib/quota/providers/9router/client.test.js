@@ -36,8 +36,8 @@ describe('9Router client', () => {
     const result = await client.fetchServer(SERVER);
     expect(result.skipped).toBe(0);
     expect(result.connections).toEqual([
-      { provider: 'codex', windows: [{ windowKey: 'session', usedPercent: 20, resetAt: null }] },
-      { provider: 'codex', windows: [{ windowKey: 'session', usedPercent: 60, resetAt: null }] },
+      { provider: 'codex', windows: [{ windowKey: 'session', kind: 'percent', usedPercent: 20, resetAt: null }] },
+      { provider: 'codex', windows: [{ windowKey: 'session', kind: 'percent', usedPercent: 60, resetAt: null }] },
     ]);
     expect(calls[0]).toMatchObject({ path: '/api/auth/login', method: 'POST', body: JSON.stringify({ password: 'pw-secret' }) });
     expect(calls[1].path).toBe('/api/providers/client?provider=all&accountStatus=active&page=1&pageSize=500');
@@ -65,7 +65,7 @@ describe('9Router client', () => {
     });
     const client = createNineRouterClient({ fetchImpl });
     await expect(client.fetchServer(SERVER)).rejects.toThrow('wrong dashboard password');
-    await expect(client.fetchServer({ ...SERVER, password: 'new-pw' })).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServer({ ...SERVER, password: 'new-pw' })).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
   });
 
   it('waits out a lockout before calling again', async () => {
@@ -83,7 +83,7 @@ describe('9Router client', () => {
     await expect(client.fetchServer(SERVER)).rejects.toThrow('dashboard login locked, retry in 1 s');
     expect(calls).toHaveLength(1);
     time += 1_000;
-    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
   });
 
   it('re-logs in once when the session is rejected', async () => {
@@ -93,7 +93,7 @@ describe('9Router client', () => {
       '/api/providers/client': () => (++list === 1 ? Response.json({ error: 'Unauthorized' }, { status: 401 }) : listResponse([])),
     });
     const client = createNineRouterClient({ fetchImpl });
-    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
     expect(calls.map((c) => c.path.split('?')[0])).toEqual(['/api/auth/login', '/api/providers/client', '/api/auth/login', '/api/providers/client']);
   });
 
@@ -115,6 +115,14 @@ describe('9Router client', () => {
     const result = await createNineRouterClient({ fetchImpl }).fetchServer(SERVER);
     expect(result.connections).toHaveLength(1);
     expect(result.skipped).toBe(6);
+    expect(result.skippedReasons).toEqual({
+      'HTTP 401': 1,
+      'HTTP 404': 1,
+      'HTTP 500': 1,
+      'no usage data': 1,
+      'invalid response': 1,
+      error: 1,
+    });
   });
 
   it('caches a server result for 60 seconds and shares in-flight requests', async () => {
@@ -169,7 +177,7 @@ describe('9Router client', () => {
     const client = createNineRouterClient({ fetchImpl });
     await expect(client.fetchServer(SERVER)).rejects.toThrow('dashboard login failed (HTTP 503)');
     expect(calls.filter((c) => c.path === '/api/auth/login')).toHaveLength(1);
-    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
     expect(calls.filter((c) => c.path === '/api/auth/login')).toHaveLength(2);
   });
 
@@ -188,7 +196,7 @@ describe('9Router client', () => {
     await expect(client.checkLogin(SERVER)).resolves.toBeUndefined();
     expect(calls).toHaveLength(2);
 
-    await expect(client.fetchServerCached(SERVER)).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServerCached(SERVER)).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
     expect(calls).toHaveLength(3);
     expect(calls[2].path).toBe('/api/providers/client?provider=all&accountStatus=active&page=1&pageSize=500');
   });
@@ -217,8 +225,8 @@ describe('9Router client', () => {
     });
     const client = createNineRouterClient({ fetchImpl });
     const [res1, res2] = await Promise.all([client.fetchServer(SERVER), client.fetchServer(SERVER)]);
-    expect(res1).toEqual({ connections: [], skipped: 0 });
-    expect(res2).toEqual({ connections: [], skipped: 0 });
+    expect(res1).toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
+    expect(res2).toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
     expect(calls.filter((c) => c.path === '/api/auth/login')).toHaveLength(1);
     expect(calls.filter((c) => c.path.startsWith('/api/providers/client'))).toHaveLength(2);
   });
@@ -242,10 +250,10 @@ describe('9Router client', () => {
     expect(calls).toHaveLength(3);
   });
 
-  it('usage requests never exceed 4 in flight', async () => {
+  it('usage requests never exceed 8 in flight', async () => {
     let currentInFlight = 0;
     let maxInFlight = 0;
-    const connections = Array.from({ length: 10 }, (_, i) => ({ id: `conn-${i}`, provider: 'codex' }));
+    const connections = Array.from({ length: 20 }, (_, i) => ({ id: `conn-${i}`, provider: 'codex' }));
 
     const { fetchImpl } = makeFetch({
       '/api/auth/login': () => cookieResponse(),
@@ -261,9 +269,9 @@ describe('9Router client', () => {
 
     const client = createNineRouterClient({ fetchImpl });
     const result = await client.fetchServer(SERVER);
-    expect(result.connections).toHaveLength(10);
+    expect(result.connections).toHaveLength(20);
     expect(result.skipped).toBe(0);
-    expect(maxInFlight).toBe(4);
+    expect(maxInFlight).toBe(8);
   });
 
   it('3xx list response triggers exactly one re-login', async () => {
@@ -275,7 +283,7 @@ describe('9Router client', () => {
         : listResponse([])),
     });
     const client = createNineRouterClient({ fetchImpl });
-    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0 });
+    await expect(client.fetchServer(SERVER)).resolves.toEqual({ connections: [], skipped: 0, skippedReasons: {}, pending: 0 });
     expect(calls.map((c) => c.path.split('?')[0])).toEqual([
       '/api/auth/login',
       '/api/providers/client',
@@ -310,5 +318,176 @@ describe('9Router client', () => {
     });
     const client = createNineRouterClient({ fetchImpl });
     await expect(client.fetchServer(SERVER)).rejects.toThrow('request timed out');
+  });
+
+  it('fetchServer populates progress object in place as each usage call settles', async () => {
+    const { fetchImpl } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => listResponse([
+        { id: 'a', provider: 'codex' },
+        { id: 'b', provider: 'codex' },
+        { id: 'c', provider: 'codex' },
+      ]),
+      '/api/usage/:id': ({ pathname }) => {
+        if (pathname.endsWith('/b')) return new Response('fail', { status: 500 });
+        return codexUsage(20);
+      },
+    });
+    const client = createNineRouterClient({ fetchImpl });
+    const progress = {};
+    const result = await client.fetchServer(SERVER, { progress });
+    expect(progress.listed).toBe(true);
+    expect(progress.total).toBe(3);
+    expect(progress.connections).toHaveLength(2);
+    expect(progress.skipped).toBe(1);
+    expect(progress.skippedReasons).toEqual({ 'HTTP 500': 1 });
+    expect(result.connections).toEqual(progress.connections);
+    expect(result.skipped).toBe(1);
+    expect(result.pending).toBe(0);
+  });
+
+  it('fetchServer categorises timeouts into skippedReasons', async () => {
+    const { fetchImpl } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => listResponse([
+        { id: 'a', provider: 'codex' },
+        { id: 'b', provider: 'codex' },
+      ]),
+      '/api/usage/:id': ({ pathname }) => {
+        if (pathname.endsWith('/b')) throw new DOMException('timed out', 'TimeoutError');
+        return codexUsage(30);
+      },
+    });
+    const client = createNineRouterClient({ fetchImpl });
+    const result = await client.fetchServer(SERVER);
+    expect(result.connections).toHaveLength(1);
+    expect(result.skipped).toBe(1);
+    expect(result.skippedReasons).toEqual({ timeout: 1 });
+  });
+
+  it('fetchServerCached returns partial snapshot at deadline with pending count, then next call after background completion returns full result without new network calls', async () => {
+    let unblockRemaining;
+    const remainingPromise = new Promise((resolve) => {
+      unblockRemaining = resolve;
+    });
+
+    const { fetchImpl, calls } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => listResponse([
+        { id: 'a', provider: 'codex' },
+        { id: 'b', provider: 'codex' },
+        { id: 'c', provider: 'codex' },
+        { id: 'd', provider: 'codex' },
+      ]),
+      '/api/usage/:id': async ({ pathname }) => {
+        if (pathname.endsWith('/c') || pathname.endsWith('/d')) {
+          await remainingPromise;
+        }
+        return codexUsage(25);
+      },
+    });
+
+    const client = createNineRouterClient({ fetchImpl, partialAfterMs: 40 });
+    const snapshot = await client.fetchServerCached(SERVER);
+
+    expect(snapshot.pending).toBe(2);
+    expect(snapshot.connections).toHaveLength(2);
+    expect(snapshot.skipped).toBe(0);
+    expect(snapshot.skippedReasons).toEqual({});
+
+    const listCallsBefore = calls.filter((c) => c.path.startsWith('/api/providers/client')).length;
+    expect(listCallsBefore).toBe(1);
+
+    unblockRemaining();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const fullResult = await client.fetchServerCached(SERVER);
+    expect(fullResult.pending).toBe(0);
+    expect(fullResult.connections).toHaveLength(4);
+    expect(fullResult.skipped).toBe(0);
+
+    const listCallsAfter = calls.filter((c) => c.path.startsWith('/api/providers/client')).length;
+    expect(listCallsAfter).toBe(1);
+  });
+
+  it('fetchServerCached returns stale value immediately and starts exactly one background refresh', async () => {
+    let time = 0;
+    let unblockRefresh;
+    const refreshGate = new Promise((resolve) => {
+      unblockRefresh = resolve;
+    });
+    let listCallCount = 0;
+
+    const { fetchImpl, calls } = makeFetch({
+      '/api/auth/login': () => cookieResponse(),
+      '/api/providers/client': () => {
+        listCallCount++;
+        return listResponse([{ id: 'a', provider: 'codex' }]);
+      },
+      '/api/usage/:id': async () => {
+        if (listCallCount > 1) {
+          await refreshGate;
+        }
+        return codexUsage(40);
+      },
+    });
+
+    const client = createNineRouterClient({ fetchImpl, now: () => time });
+    const initial = await client.fetchServerCached(SERVER);
+    expect(initial.connections).toHaveLength(1);
+    expect(calls.filter((c) => c.path.startsWith('/api/providers/client'))).toHaveLength(1);
+
+    time += 65_000;
+
+    const stale1 = await client.fetchServerCached(SERVER);
+    const stale2 = await client.fetchServerCached(SERVER);
+    expect(stale1).toBe(initial);
+    expect(stale2).toBe(initial);
+    expect(calls.filter((c) => c.path.startsWith('/api/providers/client'))).toHaveLength(2);
+
+    unblockRefresh();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const fresh = await client.fetchServerCached(SERVER);
+    expect(fresh.connections).toHaveLength(1);
+    expect(calls.filter((c) => c.path.startsWith('/api/providers/client'))).toHaveLength(2);
+  });
+
+  it('background refresh rejection does not produce an unhandled rejection and replaces cache for next call', async () => {
+    let time = 0;
+    let listCallCount = 0;
+    const unhandled = [];
+    const onUnhandled = (err) => unhandled.push(err);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const { fetchImpl } = makeFetch({
+        '/api/auth/login': () => cookieResponse(),
+        '/api/providers/client': () => {
+          listCallCount++;
+          if (listCallCount > 1) {
+            return new Response('Bad Gateway', { status: 502 });
+          }
+          return listResponse([{ id: 'a', provider: 'codex' }]);
+        },
+        '/api/usage/:id': () => codexUsage(10),
+      });
+
+      const client = createNineRouterClient({ fetchImpl, now: () => time });
+      const initial = await client.fetchServerCached(SERVER);
+      expect(initial.connections).toHaveLength(1);
+
+      time += 65_000;
+
+      const stale = await client.fetchServerCached(SERVER);
+      expect(stale).toBe(initial);
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(unhandled).toHaveLength(0);
+
+      await expect(client.fetchServerCached(SERVER)).rejects.toThrow('connection list failed (HTTP 502)');
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandled);
+    }
   });
 });

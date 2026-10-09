@@ -6,7 +6,8 @@ import { connectionWindows } from './transforms.js';
 const REQUEST_TIMEOUT_MS = 15_000;
 const SESSION_TTL_MS = 23 * 60 * 60 * 1000;
 const RESULT_TTL_MS = 60_000;
-const USAGE_CONCURRENCY = 4;
+const USAGE_CONCURRENCY = 8;
+const PARTIAL_RESULT_MS = 20_000;
 const DEFAULT_LOCKOUT_SECONDS = 60;
 const LIST_PATH = '/api/providers/client?provider=all&accountStatus=active&page=1&pageSize=500';
 
@@ -53,7 +54,13 @@ const mapWithLimit = async (items, limit, worker) => {
   return results;
 };
 
-export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {}) => {
+export const createNineRouterClient = ({
+  fetchImpl = fetch,
+  now = Date.now,
+  partialAfterMs = PARTIAL_RESULT_MS,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+} = {}) => {
   const sessions = new Map();
   const results = new Map();
   const logins = new Map();
@@ -168,7 +175,14 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
     return { response, payload };
   };
 
-  const fetchServer = async (server) => {
+  const fetchServer = async (server, { progress } = {}) => {
+    const prog = progress ?? {};
+    prog.listed = false;
+    prog.total = 0;
+    prog.connections = [];
+    prog.skipped = 0;
+    prog.skippedReasons = {};
+
     const key = serverKey(server);
     let cookie = await sessionCookie(server, key);
 
@@ -196,61 +210,171 @@ export const createNineRouterClient = ({ fetchImpl = fetch, now = Date.now } = {
       (entry) => isRecord(entry) && asNonEmptyString(entry.id) !== null && entry.isActive !== false,
     );
 
-    const usageResults = await mapWithLimit(activeConnections, USAGE_CONCURRENCY, async (connection) => {
+    prog.listed = true;
+    prog.total = activeConnections.length;
+
+    await mapWithLimit(activeConnections, USAGE_CONCURRENCY, async (connection) => {
       try {
         const id = encodeURIComponent(connection.id);
         const { response: usageRes, payload: usagePayload } = await getJson(server, `/api/usage/${id}`, cookie);
-        if (!usageRes || usageRes.status < 200 || usageRes.status >= 300 || !usagePayload) {
-          return null;
+        if (!usageRes || usageRes.status < 200 || usageRes.status >= 300) {
+          const status = usageRes ? usageRes.status : 0;
+          const reason = status > 0 ? `HTTP ${status}` : 'error';
+          prog.skipped += 1;
+          prog.skippedReasons[reason] = (prog.skippedReasons[reason] ?? 0) + 1;
+          return;
+        }
+        if (!isRecord(usagePayload)) {
+          prog.skipped += 1;
+          prog.skippedReasons['invalid response'] = (prog.skippedReasons['invalid response'] ?? 0) + 1;
+          return;
         }
         const windows = connectionWindows(connection.provider, usagePayload);
         if (!Array.isArray(windows) || windows.length === 0) {
-          return null;
+          prog.skipped += 1;
+          prog.skippedReasons['no usage data'] = (prog.skippedReasons['no usage data'] ?? 0) + 1;
+          return;
         }
-        return { provider: connection.provider, windows };
-      } catch {
-        return null;
+        prog.connections.push({ provider: connection.provider, windows });
+      } catch (error) {
+        const reqError = toRequestError(error);
+        const reason = reqError instanceof RequestTimeout ? 'timeout' : 'error';
+        prog.skipped += 1;
+        prog.skippedReasons[reason] = (prog.skippedReasons[reason] ?? 0) + 1;
       }
     });
 
-    let skipped = 0;
-    const connections = [];
-    for (const item of usageResults) {
-      if (item) {
-        connections.push(item);
-      } else {
-        skipped += 1;
-      }
-    }
-
-    return { connections, skipped };
+    return {
+      connections: prog.connections,
+      skipped: prog.skipped,
+      skippedReasons: prog.skippedReasons,
+      pending: 0,
+    };
   };
 
   const fetchServerCached = (server) => {
     const key = serverKey(server);
-    const cached = results.get(key);
-    if (cached) {
-      if (cached.settledAt === undefined) {
-        return cached.promise;
+    let entry = results.get(key);
+
+    if (entry) {
+      if (entry.status === 'resolved' && entry.settledAt !== undefined && (now() - entry.settledAt < RESULT_TTL_MS)) {
+        return Promise.resolve(entry.value);
       }
-      if (now() - cached.settledAt < RESULT_TTL_MS) {
-        return cached.promise;
+
+      if (entry.status === 'rejected' && entry.settledAt !== undefined && (now() - entry.settledAt < RESULT_TTL_MS)) {
+        return Promise.reject(entry.error);
+      }
+
+      if (entry.status === 'resolved') {
+        if (!entry.inFlight) {
+          const progress = { listed: false, total: 0, connections: [], skipped: 0, skippedReasons: {} };
+          const refreshPromise = (async () => {
+            try {
+              const result = await fetchServer(server, { progress });
+              const current = results.get(key);
+              if (current) {
+                current.status = 'resolved';
+                current.value = result;
+                current.error = undefined;
+                current.settledAt = now();
+                current.inFlight = null;
+              }
+              return result;
+            } catch (err) {
+              const current = results.get(key);
+              if (current) {
+                current.status = 'rejected';
+                current.value = undefined;
+                current.error = err;
+                current.settledAt = now();
+                current.inFlight = null;
+              }
+            }
+          })();
+          refreshPromise.catch(() => {});
+          entry.inFlight = { promise: refreshPromise, progress };
+        }
+        return Promise.resolve(entry.value);
+      }
+
+      if (entry.status === 'rejected' && !entry.inFlight) {
+        results.delete(key);
+        entry = null;
       }
     }
 
-    const entry = { settledAt: undefined };
-    entry.promise = (async () => {
-      try {
-        const result = await fetchServer(server);
-        entry.settledAt = now();
-        return result;
-      } catch (error) {
-        entry.settledAt = now();
-        throw error;
+    if (!entry) {
+      entry = { status: undefined, value: undefined, error: undefined, settledAt: undefined, inFlight: null };
+      results.set(key, entry);
+    }
+
+    if (!entry.inFlight) {
+      const progress = { listed: false, total: 0, connections: [], skipped: 0, skippedReasons: {} };
+      const inFlightPromise = (async () => {
+        try {
+          const result = await fetchServer(server, { progress });
+          const current = results.get(key);
+          if (current) {
+            current.status = 'resolved';
+            current.value = result;
+            current.error = undefined;
+            current.settledAt = now();
+            current.inFlight = null;
+          }
+          return result;
+        } catch (err) {
+          const current = results.get(key);
+          if (current) {
+            current.status = 'rejected';
+            current.value = undefined;
+            current.error = err;
+            current.settledAt = now();
+            current.inFlight = null;
+          }
+          throw err;
+        }
+      })();
+      inFlightPromise.catch(() => {});
+      entry.inFlight = { promise: inFlightPromise, progress };
+    }
+
+    const inFlight = entry.inFlight;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer = null;
+
+      if (Number.isFinite(partialAfterMs) && partialAfterMs > 0) {
+        timer = setTimer(() => {
+          if (settled) return;
+          settled = true;
+          const p = inFlight.progress;
+          const done = p.connections.length + p.skipped;
+          const snapshot = {
+            connections: [...p.connections],
+            skipped: p.skipped,
+            skippedReasons: { ...p.skippedReasons },
+            pending: p.listed ? p.total - done : null,
+          };
+          resolve(snapshot);
+        }, partialAfterMs);
+        timer?.unref?.();
       }
-    })();
-    results.set(key, entry);
-    return entry.promise;
+
+      inFlight.promise.then(
+        (res) => {
+          if (settled) return;
+          settled = true;
+          if (timer !== null) clearTimer(timer);
+          resolve(res);
+        },
+        (err) => {
+          if (settled) return;
+          settled = true;
+          if (timer !== null) clearTimer(timer);
+          reject(err);
+        },
+      );
+    });
   };
 
   const checkLogin = async (server) => {

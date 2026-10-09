@@ -1,4 +1,4 @@
-import { asNonEmptyString, asObject, toNumber, toUsageWindow } from '../../utils/index.js';
+import { asNonEmptyString, asObject, formatMoney, toNumber, toUsageWindow } from '../../utils/index.js';
 
 const PROVIDER_LABELS = {
   codex: 'Codex',
@@ -58,9 +58,18 @@ export const connectionWindows = (provider, usage) => {
   for (const [windowKey, rawQuota] of Object.entries(quotas)) {
     if (provider === 'antigravity' && !ANTIGRAVITY_GROUP_KEYS.has(windowKey)) continue;
     const quota = asRecord(rawQuota);
+    if (!quota) continue;
+    if (quota.isCreditBalance === true) {
+      const amount = parseNumber(quota.total);
+      if (amount === null || !Number.isFinite(amount)) continue;
+      const rawCurrency = asNonEmptyString(quota.currency);
+      const currency = rawCurrency !== null ? rawCurrency.toUpperCase() : 'USD';
+      windows.push({ windowKey, kind: 'balance', amount, currency });
+      continue;
+    }
     const usedPercent = quotaUsedPercent(quota);
     if (usedPercent === null) continue;
-    windows.push({ windowKey, usedPercent, resetAt: toResetTimestamp(quota.resetAt) });
+    windows.push({ windowKey, kind: 'percent', usedPercent, resetAt: toResetTimestamp(quota.resetAt) });
   }
   return windows;
 };
@@ -72,26 +81,59 @@ export const aggregateServer = (serverName, connections) => {
   for (const { provider, windows = [] } of (connections ?? [])) {
     for (const window of windows) {
       const key = `${serverName} · ${providerLabel(provider)} · ${window.windowKey}`;
-      const group = groups.get(key) ?? { windowKey: window.windowKey, percents: [], resets: [] };
-      group.percents.push(window.usedPercent);
-      if (window.resetAt !== null) group.resets.push(window.resetAt);
-      groups.set(key, group);
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          kind: window.kind ?? 'percent',
+          windowKey: window.windowKey,
+          percents: [],
+          resets: [],
+          amounts: [],
+          currency: window.currency ?? 'USD',
+        };
+        groups.set(key, group);
+      }
+      if (window.kind === 'balance') {
+        group.amounts.push(window.amount);
+        if (window.currency) group.currency = window.currency;
+      } else {
+        group.percents.push(window.usedPercent);
+        if (window.resetAt !== null && window.resetAt !== undefined) group.resets.push(window.resetAt);
+      }
     }
   }
   const models = {};
   for (const [key, group] of groups) {
-    const average = group.percents.reduce((sum, value) => sum + value, 0) / group.percents.length;
-    const exhausted = group.percents.filter((value) => value >= 100).length;
-    models[key] = {
-      windows: {
-        [group.windowKey]: toUsageWindow({
-          usedPercent: Math.round(average * 10) / 10,
-          windowSeconds: null,
-          resetAt: group.resets.length > 0 ? Math.min(...group.resets) : null,
-          valueLabel: accountLabel(group.percents.length, exhausted),
-        }),
-      },
-    };
+    if (group.kind === 'balance') {
+      const totalAmount = group.amounts.reduce((sum, value) => sum + value, 0);
+      const count = group.amounts.length;
+      const formatted = formatMoney(totalAmount) ?? totalAmount.toFixed(2);
+      const baseLabel = group.currency === 'USD' ? `$${formatted}` : `${formatted} ${group.currency}`;
+      const valueLabel = count > 1 ? `${baseLabel} · ${count} acc` : baseLabel;
+      models[key] = {
+        windows: {
+          [group.windowKey]: toUsageWindow({
+            usedPercent: null,
+            windowSeconds: null,
+            resetAt: null,
+            valueLabel,
+          }),
+        },
+      };
+    } else {
+      const average = group.percents.reduce((sum, value) => sum + value, 0) / group.percents.length;
+      const exhausted = group.percents.filter((value) => value >= 100).length;
+      models[key] = {
+        windows: {
+          [group.windowKey]: toUsageWindow({
+            usedPercent: Math.round(average * 10) / 10,
+            windowSeconds: null,
+            resetAt: group.resets.length > 0 ? Math.min(...group.resets) : null,
+            valueLabel: accountLabel(group.percents.length, exhausted),
+          }),
+        },
+      };
+    }
   }
   return models;
 };
